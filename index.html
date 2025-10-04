@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub README Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-dark': '#1e293b',
+                        'primary-light': '#334155',
+                        'accent': '#38bdf8',
+                        'success': '#10b981',
+                        'warning': '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom styles for better readability and mobile layout */
+        body {
+            background-color: #f1f5f9; /* Light blue-gray background */
+            font-family: 'Inter', 'sans-serif';
+        }
+        .container-card {
+            max-width: 95%;
+            margin: 0 auto;
+            padding: 1.5rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+        }
+        #outputArea {
+            min-height: 200px;
+            white-space: pre-wrap;
+            tab-size: 2;
+            font-family: monospace;
+        }
+        .input-group label {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #334155;
+        }
+        /* Style for the button (optional, as Tailwind handles most) */
+        button {
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-card bg-white rounded-xl mt-6 mb-8">
+        <h1 class="text-3xl font-bold text-primary-dark mb-2 text-center">
+            🚀 README Auto-Generator
+        </h1>
+        <p class="text-center text-gray-500 mb-6">
+            Input a public GitHub URL to instantly generate a Markdown README.
+        </p>
+
+        <!-- Main Input Form -->
+        <div class="input-group mb-6">
+            <label for="repoUrl" class="block text-sm mb-1">GitHub Repository URL (e.g., https://github.com/owner/repo)</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input type="url" id="repoUrl" placeholder="https://github.com/..." class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent" required>
+                <button id="generateBtn" onclick="handleGenerateClick()" class="py-3 px-6 bg-accent text-white font-semibold rounded-lg shadow-md hover:bg-sky-500">
+                    Generate README
+                </button>
+            </div>
+            <p id="statusMsg" class="mt-2 text-sm font-medium text-gray-600 h-5"></p>
+        </div>
+        
+        <!-- Loading Spinner -->
+        <div id="loadingIndicator" class="hidden flex justify-center items-center py-4">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-primary-dark">Fetching repository data...</span>
+        </div>
+
+        <!-- Manual Input Section (Hidden by default) -->
+        <div id="manualInputSection" class="hidden mt-8 p-4 bg-gray-100 rounded-xl border-t-4 border-warning">
+            <h2 class="text-xl font-bold text-warning mb-3">⚠️ Repository Private/Invalid - Manual Mode</h2>
+            <p class="text-sm text-gray-700 mb-4">
+                We couldn't access the repository details (it might be private, or the link is incorrect). Please provide the following details manually to generate the README.
+            </p>
+
+            <div class="space-y-4">
+                <div class="input-group">
+                    <label for="manualProjectName" class="block text-sm">Project Name</label>
+                    <input type="text" id="manualProjectName" placeholder="My Awesome Project" class="w-full p-2 border border-gray-300 rounded-lg">
+                </div>
+                <div class="input-group">
+                    <label for="manualDescription" class="block text-sm">Description</label>
+                    <textarea id="manualDescription" rows="3" placeholder="A brief summary of what this project does." class="w-full p-2 border border-gray-300 rounded-lg"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="manualTechStack" class="block text-sm">Main Build/Tech Stack (e.g., React, Python/Django, Node.js)</label>
+                    <input type="text" id="manualTechStack" placeholder="React, Tailwind CSS, Firebase" class="w-full p-2 border border-gray-300 rounded-lg">
+                </div>
+            </div>
+            
+            <button id="manualGenerateBtn" onclick="handleManualGenerateClick()" class="w-full mt-4 py-3 px-6 bg-warning text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600">
+                Generate with Manual Details
+            </button>
+        </div>
+
+        <!-- Output Area -->
+        <div id="outputContainer" class="mt-8 hidden">
+            <h2 class="text-2xl font-semibold text-primary-dark mb-3">Generated README (Markdown)</h2>
+            <textarea id="outputArea" readonly class="w-full bg-gray-50 border border-gray-300 p-4 rounded-lg text-sm"></textarea>
+            <button id="copyBtn" onclick="copyToClipboard()" class="mt-3 py-2 px-4 bg-success text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600">
+                Copy to Clipboard
+            </button>
+        </div>
+        
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.github.com/repos/';
+        
+        const repoUrlInput = document.getElementById('repoUrl');
+        const statusMsg = document.getElementById('statusMsg');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const manualInputSection = document.getElementById('manualInputSection');
+        const outputContainer = document.getElementById('outputContainer');
+        const outputArea = document.getElementById('outputArea');
+        const generateBtn = document.getElementById('generateBtn');
+
+        /**
+         * Extracts owner and repo name from a GitHub URL.
+         * @param {string} url 
+         * @returns {{owner: string, repo: string} | null}
+         */
+        function extractRepoInfo(url) {
+            try {
+                const parsedUrl = new URL(url);
+                if (parsedUrl.hostname !== 'github.com') {
+                    return null;
+                }
+                const pathParts = parsedUrl.pathname.split('/').filter(p => p);
+                if (pathParts.length < 2) {
+                    return null;
+                }
+                const [owner, repo] = pathParts;
+                return { owner, repo };
+            } catch (e) {
+                console.error("URL parsing error:", e);
+                return null;
+            }
+        }
+
+        /**
+         * Fetches basic repository metadata from GitHub API.
+         * @param {string} owner 
+         * @param {string} repo 
+         * @returns {Promise<object | null>} Repository data or null on failure.
+         */
+        async function fetchRepoData(owner, repo) {
+            const url = `${API_BASE}${owner}/${repo}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    // This handles 404 (Not Found) or 403 (Forbidden/Rate Limit/Private)
+                    console.error("GitHub API request failed:", response.status, response.statusText);
+                    return null;
+                }
+                const data = await response.json();
+                return {
+                    name: data.name,
+                    description: data.description || "A project developed by " + data.owner.login,
+                    language: data.language || 'Multiple/Unknown',
+                    url: data.html_url
+                };
+            } catch (error) {
+                console.error("Network or parsing error:", error);
+                return null;
+            }
+        }
+
+        /**
+         * Generates the Markdown README content.
+         * @param {object} data - Repo data (automatic)
+         * @param {object | null} manualData - Manual data fallback
+         * @returns {string} The complete README string.
+         */
+        function generateReadme(data, manualData = null) {
+            const repoName = manualData ? manualData.name : data.name;
+            const description = manualData ? manualData.description : data.description;
+            const techStack = manualData ? manualData.techStack : data.language;
+            const repoUrl = data ? data.url : '#';
+            
+            // Function to capitalize the first letter of the repository name
+            const capitalizedName = repoName.charAt(0).toUpperCase() + repoName.slice(1);
+
+            const readmeContent = 
+`# ${capitalizedName}
+
+![GitHub Repo URL](${repoUrl})
+
+## 📝 Description
+
+${description}
+
+---
+
+## ✨ Features
+
+* Feature 1: Briefly describe a key feature.
+* Feature 2: Describe another important feature.
+* (Add more features here)
+
+---
+
+## 🏗️ Built With
+
+This project was built using **${techStack}**.
+
+* ${techStack}
+* (List other frameworks, libraries, or tools)
+
+---
+
+## 📂 Project Structure
+
+A typical project structure often looks like this. Modify this to match your actual repository layout.
+
+\`\`\`
+.
+├── src/                  # Main application source code
+│   ├── components/       # UI elements (React, Vue, etc.)
+│   ├── pages/            # Views or routes
+│   └── index.js          # Entry point (or main.py, etc.)
+├── public/               # Static assets (HTML, images, fonts)
+├── tests/                # Unit/integration tests
+├── .gitignore
+├── package.json          # Or equivalent build file (pom.xml, requirements.txt)
+└── README.md
+\`\`\`
+
+---
+
+## ⚙️ Prerequisites
+
+Before installing, ensure you have the following installed on your system:
+
+* Node.js (for Node/JS projects)
+* Python 3.x (for Python projects)
+* (List specific required tools or environments)
+
+## 💻 Installation
+
+1.  **Clone the repository:**
+    \`\`\`bash
+    git clone ${repoUrl}
+    cd ${repoName}
+    \`\`\`
+
+2.  **Install dependencies:**
+    \`\`\`bash
+    # Example: For Node.js projects
+    npm install
+
+    # Example: For Python projects
+    # pip install -r requirements.txt
+    \`\`\`
+
+3.  **Run the application:**
+    \`\`\`bash
+    # Example command to start the app in development mode
+    npm run dev
+    # or
+    # python main.py
+    \`\`\`
+
+---
+
+## 🛠️ Usage
+
+Explain how to use the project here, including any main features or commands.
+
+\`\`\`
+# Example usage:
+./run_tool --help
+\`\`\`
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+1.  Fork the Project
+2.  Create your Feature Branch (\`git checkout -b feature/AmazingFeature\`)
+3.  Commit your Changes (\`git commit -m 'Add some AmazingFeature'\`)
+4.  Push to the Branch (\`git push origin feature/AmazingFeature\`)
+5.  Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the MIT License. See \`LICENSE\` for more information.
+
+*This README was automatically generated.*
+`;
+            return readmeContent.trim();
+        }
+
+        /**
+         * Clears status messages and hides optional sections.
+         */
+        function resetUI() {
+            statusMsg.textContent = '';
+            loadingIndicator.classList.add('hidden');
+            manualInputSection.classList.add('hidden');
+            outputContainer.classList.add('hidden');
+            outputArea.value = '';
+            generateBtn.disabled = false;
+        }
+        
+        /**
+         * Main handler for the automatic generation attempt.
+         */
+        async function handleGenerateClick() {
+            resetUI();
+            const url = repoUrlInput.value.trim();
+            if (!url) {
+                statusMsg.textContent = 'Please enter a valid GitHub URL.';
+                statusMsg.classList.remove('text-gray-600', 'text-warning');
+                statusMsg.classList.add('text-red-500');
+                return;
+            }
+            statusMsg.classList.remove('text-red-500');
+            statusMsg.classList.add('text-gray-600');
+            generateBtn.disabled = true;
+            loadingIndicator.classList.remove('hidden');
+
+            const repoInfo = extractRepoInfo(url);
+            if (!repoInfo) {
+                statusMsg.textContent = 'Error: Invalid GitHub URL format.';
+                statusMsg.classList.remove('text-gray-600');
+                statusMsg.classList.add('text-red-500');
+                loadingIndicator.classList.add('hidden');
+                generateBtn.disabled = false;
+                return;
+            }
+
+            const repoData = await fetchRepoData(repoInfo.owner, repoInfo.repo);
+            loadingIndicator.classList.add('hidden');
+            
+            if (repoData) {
+                // SUCCESS: Public Repo found
+                statusMsg.textContent = 'Success! Repository data fetched and README generated.';
+                statusMsg.classList.remove('text-warning', 'text-red-500');
+                statusMsg.classList.add('text-success');
+                
+                const markdown = generateReadme(repoData);
+                outputArea.value = markdown;
+                outputContainer.classList.remove('hidden');
+
+            } else {
+                // FAILURE: Private or invalid repo. Fall back to manual.
+                statusMsg.textContent = 'Could not access repository (private or invalid link). Please use the manual form below.';
+                statusMsg.classList.remove('text-success', 'text-red-500');
+                statusMsg.classList.add('text-warning');
+                manualInputSection.classList.remove('hidden');
+                generateBtn.disabled = false; // Re-enable for subsequent attempts
+            }
+        }
+
+        /**
+         * Handler for generating the README using manual inputs.
+         */
+        function handleManualGenerateClick() {
+            const name = document.getElementById('manualProjectName').value.trim() || 'My Project';
+            const description = document.getElementById('manualDescription').value.trim() || 'A cool project with no description provided.';
+            const techStack = document.getElementById('manualTechStack').value.trim() || 'General Purpose/Unknown';
+            
+            // Get URL just for the link in the README, even if it failed the API check
+            const url = repoUrlInput.value.trim() || '#';
+
+            const manualData = { name, description, techStack };
+            
+            // Pass null for repoData and the manual data
+            const markdown = generateReadme({ url }, manualData);
+
+            outputArea.value = markdown;
+            outputContainer.classList.remove('hidden');
+            statusMsg.textContent = 'README generated using manual details.';
+            statusMsg.classList.remove('text-red-500', 'text-warning');
+            statusMsg.classList.add('text-success');
+            manualInputSection.classList.add('hidden'); // Hide manual form after generating
+        }
+
+        /**
+         * Copies the generated markdown to the clipboard.
+         */
+        function copyToClipboard() {
+            outputArea.select();
+            // Use execCommand for broader compatibility in iFrames
+            try {
+                document.execCommand('copy');
+                document.getElementById('copyBtn').textContent = 'Copied!';
+                setTimeout(() => {
+                    document.getElementById('copyBtn').textContent = 'Copy to Clipboard';
+                }, 2000);
+            } catch (err) {
+                console.error('Unable to copy to clipboard', err);
+                document.getElementById('copyBtn').textContent = 'Failed to Copy';
+            }
+        }
+    </script>
+</body>
+</html>
+

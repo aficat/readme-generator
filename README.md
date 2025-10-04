@@ -1,5 +1,7 @@
 # readme-generator
 
+Sample output below:
+
 ![GitHub Repo URL](https://github.com/aficat/readme-generator)
 
 ## 📝 Description
